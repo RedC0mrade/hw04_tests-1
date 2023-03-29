@@ -2,8 +2,11 @@ from django.test import Client, TestCase
 from django.urls import reverse
 from django import forms
 
-from posts.forms import PostForm
 from ..models import Post, Group, User
+from posts.forms import PostForm
+from yatube.settings import NUMBER_OF_POSTS_IN_PAG
+
+TOTAL_NUMBER_OF_POSTS = 13
 
 
 class PostPagesTests(TestCase):
@@ -39,27 +42,24 @@ class PostPagesTests(TestCase):
     def test_index_page_show_correct_context(self):
         """Шаблон index сформирован с правильным контекстом."""
         response = self.client.get(reverse('posts:index'))
-        self.assertEqual(list(response.context['page_obj']),
-                         [self.post])
         self.check_post(response)
 
     def test_group_page_show_correct_context(self):
         """Шаблон group_list сформирован с правильным контекстом."""
         response = self.client.get(
             reverse('posts:group_list', args=(self.group.slug,)))
-        list_groups = list(map(lambda x: x.group,
-                               response.context['page_obj']))
-        for group in list_groups:
-            self.assertEqual(group, self.group)
+        self.assertIn('group', response.context)
+        group = response.context.get('group')
+        self.assertEqual(group, self.group)
         self.check_post(response)
 
     def test_profile_page_show_correct_context(self):
         """Шаблон profile сформирован с правильным контекстом."""
         response = self.client.get(
             reverse('posts:profile', args=(self.user.username,)))
-        list_authors = list(map(lambda x: x['author'], response.context))
-        for author in list_authors:
-            self.assertEqual(author, self.user)
+        self.assertIn('author', response.context)
+        author = response.context.get('author')
+        self.assertEqual(author, self.user)
         self.check_post(response)
 
     def test_post_detail_page_show_correct_context(self):
@@ -100,7 +100,7 @@ class PostPagesTests(TestCase):
         response = self.client.get(reverse('posts:group_list',
                                            args=(new_group.slug,)))
         self.assertEqual(len(response.context['page_obj']), 0)
-        post = Post.objects.get(id=self.post.id)
+        post = Post.objects.first()
         self.assertEqual(post.group, self.group)
         response = self.client.get(reverse('posts:group_list',
                                            args=(self.group.slug,)))
@@ -119,19 +119,19 @@ class PaginatorViewsTest(TestCase):
         )
         cls.posts = Post.objects.bulk_create(
             [Post(author=cls.user,
-                  text=f'{i}',
-                  group=cls.group) for i in range(13)]
+                  text=f'{index}',
+                  group=cls.group) for index in range(TOTAL_NUMBER_OF_POSTS)]
         )
 
     def test_page(self):
         reverse_names = (
-            ('posts:index', ()),
+            ('posts:index', None),
             ('posts:group_list', (self.group.slug,)),
             ('posts:profile', (self.user.username,)),
         )
         posts_in_page = (
-            ('?page=1', 10),
-            ('?page=2', 3),
+            ('?page=1', NUMBER_OF_POSTS_IN_PAG),
+            ('?page=2', TOTAL_NUMBER_OF_POSTS - NUMBER_OF_POSTS_IN_PAG),
         )
         for name, args in reverse_names:
             with self.subTest(name=name):

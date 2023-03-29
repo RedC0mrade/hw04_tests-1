@@ -1,5 +1,6 @@
 from django.test import Client, TestCase
 from django.urls import reverse
+from http import HTTPStatus
 
 from ..models import Group, Post, User
 
@@ -18,6 +19,7 @@ class PostURLTests(TestCase):
         cls.post = Post.objects.create(
             author=cls.user,
             text='Тестовый пост',
+            group=cls.group,
         )
 
     def setUp(self):
@@ -26,19 +28,19 @@ class PostURLTests(TestCase):
         self.authorized_client = Client()
         self.authorized_client.force_login(self.user2)
         self.reverse_names = (
-            ('posts:index', ()),
+            ('posts:index', None),
             ('posts:group_list', (self.group.slug,)),
             ('posts:profile', (self.user.username,)),
             ('posts:post_detail', (self.post.id,)),
             ('posts:post_edit', (self.post.id,)),
-            ('posts:post_create', ()),
+            ('posts:post_create', None),
         )
 
     def test_for_matching_reverse_with_hardcore(self):
         '''тест проверки соответствия, что прямые - хардкод ссылки
         равны полученным по reverse(name)'''
         reverse_for_url = (
-            ('posts:index', (), '/'),
+            ('posts:index', None, '/'),
             ('posts:group_list',
              (self.group.slug,),
              f'/group/{self.group.slug}/'
@@ -52,7 +54,7 @@ class PostURLTests(TestCase):
              (self.post.id,),
              f'/posts/{self.post.id}/edit/'
              ),
-            ('posts:post_create', (), '/create/'),
+            ('posts:post_create', None, '/create/'),
         )
         for name, args, url in reverse_for_url:
             with self.subTest(name=name):
@@ -62,12 +64,12 @@ class PostURLTests(TestCase):
     def test_urls_uses_correct_template(self):
         """URL-адрес использует соответствующий шаблон."""
         templates_url_names = (
-            ('posts:index', (), 'posts/index.html'),
+            ('posts:index', None, 'posts/index.html'),
             ('posts:group_list', (self.group.slug,), 'posts/group_list.html'),
             ('posts:profile', (self.user.username,), 'posts/profile.html'),
             ('posts:post_detail', (self.post.id,), 'posts/post_detail.html'),
             ('posts:post_edit', (self.post.id,), 'posts/post_create.html'),
-            ('posts:post_create', (), 'posts/post_create.html'),
+            ('posts:post_create', None, 'posts/post_create.html'),
         )
         for name, args, template in templates_url_names:
             with self.subTest(name=name):
@@ -79,7 +81,7 @@ class PostURLTests(TestCase):
         for url, args in self.reverse_names:
             with self.subTest(url=url):
                 response = self.author.get(reverse(url, args=args))
-                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.status_code, HTTPStatus.OK)
 
     def test_url_availability_of_urls_for_auth_user(self):
         """Тест что все урлы, кроме edit доступны не автору,
@@ -92,23 +94,25 @@ class PostURLTests(TestCase):
                     self.assertRedirects(response, reverse('posts:post_detail',
                                                            args=args))
                 else:
-                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(response.status_code, HTTPStatus.OK)
 
     def test_url_availability_of_urls_for_guest(self):
         """Тест что все урлы кроме edit и create доступны анониму,
         с create и edit - редирект на авторизацию"""
+        redirect_url = ('posts:post_edit', 'posts:post_create')
         for name, args in self.reverse_names:
             with self.subTest(name=name):
                 response = self.client.get(reverse(name, args=args),
                                            follow=True)
-                if name in ('posts:post_edit', 'posts:post_create'):
+                if name in redirect_url:
+                    first_url = reverse('users:login')
+                    next_url = reverse(name, args=args)
                     self.assertRedirects(response, (
-                        f"{reverse('users:login')}"
-                        f"?next={reverse(name, args=args)}"))
+                        f'{first_url}?next={next_url}'))
                 else:
-                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(response.status_code, HTTPStatus.OK)
 
     def test_unexisting_page(self):
         """Проверка недоступности несуществующей страницы"""
         response = self.client.get('/aslfdjk/')
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, HTTPStatus.NOT_FOUND)

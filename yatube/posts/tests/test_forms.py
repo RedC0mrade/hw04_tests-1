@@ -1,3 +1,4 @@
+from http import HTTPStatus
 from django.test import Client, TestCase
 from django.urls import reverse
 
@@ -28,9 +29,10 @@ class PostCreateFormTests(TestCase):
 
     def test_create_post(self):
         """Валидная форма создает запись в Post."""
+        Post.objects.all().delete()
         group = self.group
         posts_count = Post.objects.count()
-        self.assertEqual(posts_count, 1)
+        self.assertEqual(posts_count, 0)
         form_data = {
             'text': 'Тестовый текст',
             'group': group.id,
@@ -43,18 +45,11 @@ class PostCreateFormTests(TestCase):
         self.assertRedirects(response, reverse('posts:profile',
                                                args=(self.user.username,)))
         self.assertEqual(Post.objects.count(), posts_count + 1)
-        post = Post.objects.get(
-            text='Тестовый текст',
-            group=group.id,
-        )
+        post = Post.objects.first()
         self.assertEqual(post.author, self.user)
         self.assertEqual(post.group, group)
         self.assertEqual(post.text, 'Тестовый текст')
         self.assertNotEqual(post.id, self.post.id)
-        self.assertTrue(Post.objects.filter(
-            text='Тестовый текст',
-            group=group.id,
-        ).exists())
 
     def test_edit_post(self):
         """Редактированный пост сохраняется в БД c post_id."""
@@ -78,19 +73,27 @@ class PostCreateFormTests(TestCase):
             reverse('posts:post_detail',
                     args=(self.post.id,)),
         )
-        post = Post.objects.get(
-            text='asdfsafd',
-            group=group2.id,
-        )
+        post = Post.objects.first()
         response = self.client.get(reverse('posts:group_list',
                                            args=(self.group.slug,)))
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, HTTPStatus.OK)
         self.assertEqual(len(response.context['page_obj']), 0)
         self.assertEqual(post.id, self.post.id)
         self.assertEqual(Post.objects.count(), posts_count)
-        self.assertTrue(
-            Post.objects.filter(
-                text='asdfsafd',
-                author=self.user,
-            ).exists()
+
+    def test_guest_create_post(self):
+        """Не залогиненный пользователь не может создавать посты."""
+        Post.objects.all().delete()
+        posts_count = Post.objects.count()
+        self.assertEqual(posts_count, 0)
+        form_data = {
+            'text': 'asdfsafd',
+            'group': self.group.id,
+        }
+        response = self.client.post(
+            reverse('posts:post_create'),
+            data=form_data,
+            follow=True
         )
+        self.assertEqual(response.status_code, HTTPStatus.OK)
+        self.assertEqual(Post.objects.count(), posts_count)

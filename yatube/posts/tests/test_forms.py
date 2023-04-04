@@ -1,4 +1,5 @@
 from http import HTTPStatus
+
 from django.test import Client, TestCase
 from django.urls import reverse
 
@@ -49,7 +50,6 @@ class PostCreateFormTests(TestCase):
         self.assertEqual(post.author, self.user)
         self.assertEqual(post.group, group)
         self.assertEqual(post.text, 'Тестовый текст')
-        self.assertNotEqual(post.id, self.post.id)
 
     def test_edit_post(self):
         """Редактированный пост сохраняется в БД c post_id."""
@@ -74,6 +74,9 @@ class PostCreateFormTests(TestCase):
                     args=(self.post.id,)),
         )
         post = Post.objects.first()
+        self.assertEqual(post.author, self.user)
+        self.assertEqual(post.group, group2)
+        self.assertEqual(post.text, 'asdfsafd')
         response = self.client.get(reverse('posts:group_list',
                                            args=(self.group.slug,)))
         self.assertEqual(response.status_code, HTTPStatus.OK)
